@@ -2,21 +2,35 @@
 
 import { ChevronDown, Loader2, Unlink2 } from "lucide-react";
 import type { LinkItem, LinkedProduct } from "@/lib/types";
-import { cn, formatDate, formatPrice } from "@/lib/utils";
+import { cn, formatDate, formatPrice, formatSize } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { LinkSourceBadge, StoreBadge } from "./badges";
 import { ProductThumb } from "./product-thumb";
 
-const CHIP_PREVIEW = 6;
+const PRODUCT_PREVIEW = 3;
 
-function EanChip({ product }: { product: LinkedProduct }) {
+/** The catalogue product a listing points at — image + identity, so the
+ *  curator can visually verify the link without leaving the page. */
+function LinkedProductRow({ product }: { product: LinkedProduct }) {
+  const size = formatSize(product.quantity, product.unitText);
+  const subtitle = [product.brand, size].filter(Boolean).join(" · ");
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs">
-      <span className="font-mono">{product.ean}</span>
-      <span className="max-w-52 truncate text-muted-foreground">
-        {product.name ?? "—"}
-      </span>
-    </span>
+    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border/70 bg-muted/30 p-2">
+      <ProductThumb
+        src={product.imageUrl}
+        alt={product.name ?? product.ean}
+        className="size-12"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{product.name ?? "—"}</p>
+        {subtitle && (
+          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+        )}
+        <p className="font-mono text-[11px] text-muted-foreground">
+          {product.ean}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -43,7 +57,7 @@ export function LinkRow({
   const subtitle = [link.item?.brand, link.item?.sizeText]
     .filter(Boolean)
     .join(" · ");
-  const shown = expanded ? products : products.slice(0, CHIP_PREVIEW);
+  const shown = expanded ? products : products.slice(0, PRODUCT_PREVIEW);
   const hidden = products.length - shown.length;
 
   return (
@@ -96,26 +110,29 @@ export function LinkRow({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 px-4 pb-4">
+      <div className="px-4 pb-4">
+        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Linked to
+        </p>
         {products.length === 0 ? (
           <span className="text-xs text-muted-foreground">
             No linked products.
           </span>
         ) : (
-          <>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {shown.map((p, i) => (
-              <EanChip key={`${p.ean}-${i}`} product={p} />
+              <LinkedProductRow key={`${p.ean}-${i}`} product={p} />
             ))}
             {hidden > 0 && (
               <button
                 type="button"
                 onClick={onToggle}
-                className="cursor-pointer rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
+                className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border p-2 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
               >
                 +{hidden} more
               </button>
             )}
-          </>
+          </div>
         )}
       </div>
 
