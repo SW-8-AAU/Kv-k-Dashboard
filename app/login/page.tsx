@@ -43,7 +43,7 @@ export default function LoginPage() {
     <div className="flex flex-1 items-center justify-center py-24">
       <form
         onSubmit={submit}
-        className="fade-in flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-sm"
+        className="card-in flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-raised"
       >
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">

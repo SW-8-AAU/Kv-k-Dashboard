@@ -1,19 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { History, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { QueueItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuthGuard } from "@/lib/use-auth";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/app/empty-state";
+import { ErrorBanner } from "@/components/app/error-banner";
+import { PageHeader } from "@/components/app/page-header";
 import { Pagination } from "@/components/app/pagination";
 import { QueueCard } from "@/components/app/queue-card";
+import { CardListSkeleton } from "@/components/app/skeletons";
+import { useStats } from "@/components/app/stats-provider";
 
 const LIMIT = 50;
+const EXIT_MS = 190;
+
+const keyOf = (it: QueueItem) => `${it.storeType}-${it.storeProductId}`;
 
 export default function LegacyPage() {
   const ready = useAuthGuard();
+  const { refreshStats } = useStats();
 
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -22,6 +31,11 @@ export default function LegacyPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    if (ready) void refreshStats();
+  }, [ready, refreshStats]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -43,11 +57,13 @@ export default function LegacyPage() {
         limit: LIMIT,
       })
       .then((res) => {
-        setItems(res.items);
-        setTotal(res.total);
+        setItems(res.items ?? []);
+        setTotal(res.total ?? 0);
       })
       .catch((e: unknown) =>
-        setError(e instanceof ApiError ? e.message : "Failed to load legacy items"),
+        setError(
+          e instanceof ApiError ? e.message : "Failed to load legacy items",
+        ),
       )
       .finally(() => setLoading(false));
   }, [debounced, page]);
@@ -57,12 +73,18 @@ export default function LegacyPage() {
   }, [ready, load]);
 
   const removeItem = (it: QueueItem) => {
-    setItems((prev) =>
-      prev.filter(
-        (x) => !(x.storeType === it.storeType && x.storeProductId === it.storeProductId),
-      ),
-    );
-    setTotal((t) => Math.max(0, t - 1));
+    const id = keyOf(it);
+    setLeaving((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      setItems((prev) => prev.filter((x) => keyOf(x) !== id));
+      setLeaving((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setTotal((t) => Math.max(0, t - 1));
+      void refreshStats();
+    }, EXIT_MS);
   };
 
   if (!ready) return null;
@@ -71,16 +93,11 @@ export default function LegacyPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Legacy Rema items</h1>
-          <p className="text-sm text-muted-foreground">
-            Each item is backed by a synthetic product. Pick exactly one EAN — the
-            result is either a rename of the synthetic product or a merge into an
-            existing one.
-          </p>
-        </div>
-        <div className="relative ml-auto min-w-56 flex-1 sm:max-w-xs">
+      <PageHeader
+        title="Legacy"
+        subtitle="Rema items backed by a synthetic rema-… product — pick one EAN to rename or merge"
+      >
+        <div className="relative w-48 sm:w-64">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -90,39 +107,57 @@ export default function LegacyPage() {
             aria-label="Search"
           />
         </div>
-      </div>
+      </PageHeader>
 
-      <Pagination page={page} pageCount={pageCount} total={total} disabled={loading} onPageChange={setPage} />
+      {error && <ErrorBanner message={error} onRetry={load} />}
 
-      {error && (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      {loading && items.length === 0 ? (
-        <p className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading legacy items…
-        </p>
+      {loading && items.length === 0 && !error ? (
+        <CardListSkeleton />
       ) : items.length === 0 && !error ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No legacy items left.
-        </p>
+        <EmptyState
+          title={
+            debounced ? `No results for “${debounced}”` : "No legacy items left"
+          }
+          hint={
+            debounced
+              ? "Try a shorter search term."
+              : "Every synthetic rema-… product has been renamed or merged. New ones only appear if a sync finds barcode-less items."
+          }
+          icon={<History />}
+        />
       ) : (
-        <div className={cn("flex flex-col gap-3", loading && "opacity-60")}>
-          {items.map((item) => (
-            <QueueCard
-              key={`${item.storeType}-${item.storeProductId}`}
-              item={item}
-              mode="legacy"
-              onRemove={() => removeItem(item)}
-            />
-          ))}
-        </div>
-      )}
-
-      {items.length > 0 && (
-        <Pagination page={page} pageCount={pageCount} total={total} disabled={loading} onPageChange={setPage} />
+        <>
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            disabled={loading}
+            onPageChange={setPage}
+          />
+          <div
+            className={cn(
+              "flex flex-col gap-3",
+              loading && "pointer-events-none opacity-60",
+            )}
+          >
+            {items.map((item) => (
+              <QueueCard
+                key={keyOf(item)}
+                item={item}
+                mode="legacy"
+                leaving={leaving.has(keyOf(item))}
+                onRemove={() => removeItem(item)}
+              />
+            ))}
+          </div>
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            disabled={loading}
+            onPageChange={setPage}
+          />
+        </>
       )}
     </div>
   );

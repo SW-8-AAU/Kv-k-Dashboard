@@ -29,18 +29,31 @@ export function Pagination({
         ? page >= pageCount
         : false);
 
+  // Single page and a known count: no chrome needed.
+  if (pageCount !== undefined && pageCount <= 1 && page <= 1) return null;
+
   return (
     <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-      <span>
+      <span className="tabular-nums">
         Page {page}
         {pageCount !== undefined ? ` of ${Math.max(pageCount, 1)}` : ""}
         {total !== undefined ? ` · ${total} items` : ""}
       </span>
       <div className="flex gap-1.5">
-        <Button size="sm" disabled={prevDisabled} onClick={() => onPageChange(page - 1)}>
+        <Button
+          size="sm"
+          disabled={prevDisabled}
+          aria-label="Previous page"
+          onClick={() => onPageChange(page - 1)}
+        >
           <ChevronLeft /> Prev
         </Button>
-        <Button size="sm" disabled={nextDisabled} onClick={() => onPageChange(page + 1)}>
+        <Button
+          size="sm"
+          disabled={nextDisabled}
+          aria-label="Next page"
+          onClick={() => onPageChange(page + 1)}
+        >
           Next <ChevronRight />
         </Button>
       </div>
