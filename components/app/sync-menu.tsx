@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "./toaster";
 
-type ActionId = "rematch" | "sync-lidl" | "sync-rema";
+type ActionId = "rematch" | "sync-lidl" | "sync-rema" | "sync-tjek";
 
 interface Action {
   id: ActionId;

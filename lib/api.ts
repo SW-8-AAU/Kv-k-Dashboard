@@ -191,7 +191,7 @@ export const api = {
 
   rematch: () => request<StatusResult>("/rematch", { method: "POST" }),
 
-  sync: (storeType: "lidl" | "rema") =>
+  sync: (storeType: "lidl" | "rema" | "tjek") =>
     request<{ status: string; storeType: string }>(`/sync/${storeType}`, {
       method: "POST",
     }),
