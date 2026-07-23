@@ -84,7 +84,8 @@ export interface LinkListingItem {
   name: string;
   brand: string | null;
   imageUrl: string | null;
-  price: number | null;
+  // Raw Prisma row — Decimal serializes as a string ("12.95").
+  price: number | string | null;
   sizeText: string | null;
 }
 

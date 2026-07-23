@@ -4,10 +4,15 @@ export function cn(...inputs: ClassValue[]): string {
   return clsx(inputs);
 }
 
-/** Danish price display, e.g. 12.5 -> "12,50 kr". */
-export function formatPrice(value: number | null | undefined): string | null {
+/** Danish price display, e.g. 12.5 -> "12,50 kr". The API serializes
+ *  some Decimal columns as strings ("12.95") — accept both. */
+export function formatPrice(
+  value: number | string | null | undefined,
+): string | null {
   if (value === null || value === undefined) return null;
-  return `${value.toFixed(2).replace(".", ",")} kr`;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return `${n.toFixed(2).replace(".", ",")} kr`;
 }
 
 /** "quantity unitText" when present, falling back to whichever exists. */
