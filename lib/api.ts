@@ -46,6 +46,10 @@ type QueryValue = string | number | null | undefined;
 /** The single query-string builder for every API call. Empty strings, null and
  *  undefined are OMITTED — never send `storeType=` style empty params, the
  *  backend has 400'd on those before. Route every new endpoint through this. */
+function toApiPage(page: number | undefined): number | undefined {
+  return page == null ? undefined : Math.max(0, page - 1);
+}
+
 function qs(params: Record<string, QueryValue>): string {
   const sp = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -149,11 +153,14 @@ export const api = {
 
   stats: () => request<StatsResponse>("/stats"),
 
+  // UI page state is 1-based; the API is 0-based — converted here, once,
+  // for every list endpoint. Passing the raw UI page skips the first
+  // page of results (a 9-row set renders empty with total 9).
   queue: (params: QueueParams) =>
-    request<QueueResponse>(`/queue${qs({ ...params })}`),
+    request<QueueResponse>(`/queue${qs({ ...params, page: toApiPage(params.page) })}`),
 
   links: (params: { storeType?: string; page?: number; curated?: 1 }) =>
-    request<LinksResponse>(`/links${qs({ ...params })}`),
+    request<LinksResponse>(`/links${qs({ ...params, page: toApiPage(params.page) })}`),
 
   createLink: (payload: {
     storeType: string;
@@ -171,7 +178,7 @@ export const api = {
     request<StatusResult>("/items/unignore", { method: "POST", body: payload }),
 
   duplicates: (page: number) =>
-    request<DuplicatesResponse>(`/duplicates${qs({ page })}`),
+    request<DuplicatesResponse>(`/duplicates${qs({ page: toApiPage(page) })}`),
 
   approveDuplicate: (id: string | number, keepEan: string) =>
     request<{ status: string; keepEan: string; linkedEan: string }>(
