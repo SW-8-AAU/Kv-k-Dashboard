@@ -159,8 +159,11 @@ export default function MatchedPage() {
         eans,
       });
       const priced = res.priced ? ` · priced at ${res.priced} stores` : "";
+      const mirrored = res.mirrored?.length
+        ? ` · also linked at ${res.mirrored.join(", ")}`
+        : "";
       toast(
-        `Links updated (${eans.length} EAN${eans.length === 1 ? "" : "s"})${priced}`,
+        `Links updated (${eans.length} EAN${eans.length === 1 ? "" : "s"})${priced}${mirrored}`,
         "success",
       );
       load(clientMode ? 1 : page);

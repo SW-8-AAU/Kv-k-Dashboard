@@ -37,7 +37,10 @@ function approveToast(result: LinkResult, requested: number): string {
     typeof result.priced === "number"
       ? ` · priced at ${result.priced} store${result.priced === 1 ? "" : "s"}`
       : "";
-  return `Linked ${linked} EAN(s)${created}${priced}`;
+  const mirrored = result.mirrored?.length
+    ? ` · also linked at ${result.mirrored.join(", ")}`
+    : "";
+  return `Linked ${linked} EAN(s)${created}${priced}${mirrored}`;
 }
 
 export function QueueCard({

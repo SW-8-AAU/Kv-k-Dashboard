@@ -118,6 +118,8 @@ export interface LinkResult {
   ean?: string;
   /** Number of stores where the approval immediately wrote live offers. */
   priced?: number;
+  /** Sibling Tjek chains that were linked+priced in the same call. */
+  mirrored?: string[];
 }
 
 export interface UnlinkResult {
