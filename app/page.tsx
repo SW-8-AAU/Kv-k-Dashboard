@@ -1,29 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Copy, EyeOff, Loader2, RefreshCw, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Inbox, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
-import type { Bucket, QueueItem, StatsResponse, StoreType } from "@/lib/types";
+import type { Bucket, QueueItem, StoreType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuthGuard } from "@/lib/use-auth";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { EmptyState } from "@/components/app/empty-state";
+import { ErrorBanner } from "@/components/app/error-banner";
+import { PageHeader } from "@/components/app/page-header";
 import { Pagination } from "@/components/app/pagination";
-import { QueueCard } from "@/components/app/queue-card";
-import { StoreBadge } from "@/components/app/badges";
-import { useToast } from "@/components/app/toaster";
+import { QueueCard, type QueueCardActions } from "@/components/app/queue-card";
+import { CardListSkeleton } from "@/components/app/skeletons";
+import { useStats } from "@/components/app/stats-provider";
 
 const LIMIT = 50;
+const EXIT_MS = 190;
 const STORES: StoreType[] = ["lidl", "rema", "salling"];
 const BUCKETS: Bucket[] = ["match", "possible", "none"];
 
+const EMPTY_HINTS: Record<Bucket, string> = {
+  match:
+    "No confident matches waiting. New suggestions appear after a store sync — run Rematch (Sync menu) after seeding OFF to regenerate.",
+  possible:
+    "No borderline suggestions to review. Check the Match bucket, or run Rematch to recompute.",
+  none:
+    "No unmatched items. Everything from the last sync either matched or was ignored.",
+};
+
+const keyOf = (it: QueueItem) => `${it.storeType}-${it.storeProductId}`;
+
 export default function QueuePage() {
   const ready = useAuthGuard();
-  const toast = useToast();
+  const { stats, refreshStats } = useStats();
 
-  const [stats, setStats] = useState<StatsResponse | null>(null);
   const [storeType, setStoreType] = useState("");
   const [bucket, setBucket] = useState<Bucket>("match");
   const [search, setSearch] = useState("");
@@ -33,15 +45,23 @@ export default function QueuePage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
-  const [action, setAction] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
 
-  const loadStats = useCallback(() => {
-    api.stats().then(setStats).catch(() => {});
-  }, []);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const selectedRef = useRef(selectedIdx);
+  selectedRef.current = selectedIdx;
+  const cardActions = useRef(new Map<string, QueueCardActions>());
+  const registerCbs = useRef(
+    new Map<string, (a: QueueCardActions | null) => void>(),
+  );
+  const cardEls = useRef(new Map<string, HTMLDivElement>());
 
   useEffect(() => {
-    if (ready) loadStats();
-  }, [ready, loadStats]);
+    if (ready) void refreshStats();
+  }, [ready, refreshStats]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -66,12 +86,15 @@ export default function QueuePage() {
       })
       .then((res) => {
         if (stale) return;
-        setItems(res.items);
-        setTotal(res.total);
+        setItems(res.items ?? []);
+        setTotal(res.total ?? 0);
+        setSelectedIdx(null);
       })
       .catch((e: unknown) => {
         if (stale) return;
-        setListError(e instanceof ApiError ? e.message : "Failed to load the queue");
+        setListError(
+          e instanceof ApiError ? e.message : "Failed to load the queue",
+        );
       })
       .finally(() => {
         if (!stale) setLoading(false);
@@ -79,7 +102,99 @@ export default function QueuePage() {
     return () => {
       stale = true;
     };
-  }, [ready, storeType, bucket, debounced, page]);
+  }, [ready, storeType, bucket, debounced, page, reloadKey]);
+
+  // Keep the selection valid as the list shrinks.
+  useEffect(() => {
+    setSelectedIdx((sel) =>
+      sel === null || items.length === 0
+        ? null
+        : Math.min(sel, items.length - 1),
+    );
+  }, [items.length]);
+
+  // Scroll the keyboard-selected card into view.
+  useEffect(() => {
+    if (selectedIdx === null) return;
+    const item = items[selectedIdx];
+    if (!item) return;
+    cardEls.current
+      .get(keyOf(item))
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedIdx, items]);
+
+  // One-keystroke flow: j/k or arrows navigate, A approves, I ignores, Esc clears.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "SELECT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const count = itemsRef.current.length;
+      const k = e.key.toLowerCase();
+      if (k === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIdx((s) =>
+          count === 0 ? null : s === null ? 0 : Math.min(s + 1, count - 1),
+        );
+      } else if (k === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIdx((s) =>
+          count === 0 ? null : s === null ? count - 1 : Math.max(s - 1, 0),
+        );
+      } else if (e.key === "Escape") {
+        setSelectedIdx(null);
+      } else if (k === "a" || k === "i") {
+        const sel = selectedRef.current;
+        if (sel === null) return;
+        const item = itemsRef.current[sel];
+        if (!item) return;
+        e.preventDefault();
+        const actions = cardActions.current.get(keyOf(item));
+        if (k === "a") actions?.approve();
+        else actions?.ignore();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const removeItem = useCallback(
+    (it: QueueItem) => {
+      const id = keyOf(it);
+      setLeaving((prev) => new Set(prev).add(id));
+      window.setTimeout(() => {
+        setItems((prev) => prev.filter((x) => keyOf(x) !== id));
+        setLeaving((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        setTotal((t) => Math.max(0, t - 1));
+        void refreshStats();
+      }, EXIT_MS);
+    },
+    [refreshStats],
+  );
+
+  const registerFor = (id: string) => {
+    let cb = registerCbs.current.get(id);
+    if (!cb) {
+      cb = (a: QueueCardActions | null) => {
+        if (a) cardActions.current.set(id, a);
+        else cardActions.current.delete(id);
+      };
+      registerCbs.current.set(id, cb);
+    }
+    return cb;
+  };
 
   const bucketCounts = useMemo(() => {
     const counts: Record<Bucket, number> = { match: 0, possible: 0, none: 0 };
@@ -90,94 +205,13 @@ export default function QueuePage() {
     return counts;
   }, [stats, storeType]);
 
-  const storeCounts = useMemo(() => {
-    const map = new Map<StoreType, Record<Bucket, number>>();
-    for (const s of STORES) map.set(s, { match: 0, possible: 0, none: 0 });
-    for (const row of stats?.queue ?? []) {
-      const entry = map.get(row.storeType);
-      if (entry && row.bucket in entry) entry[row.bucket] += row.count;
-    }
-    return map;
-  }, [stats]);
-
-  const removeItem = (it: QueueItem) => {
-    setItems((prev) =>
-      prev.filter(
-        (x) => !(x.storeType === it.storeType && x.storeProductId === it.storeProductId),
-      ),
-    );
-    setTotal((t) => Math.max(0, t - 1));
-    loadStats();
-  };
-
-  const runAction = async (label: string, fn: () => Promise<unknown>) => {
-    setAction(label);
-    try {
-      await fn();
-      toast(`202 started · ${label}`, "success");
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : `${label} failed`, "error");
-    } finally {
-      setAction(null);
-    }
-  };
-
   if (!ready) return null;
 
   const pageCount = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {STORES.map((s) => {
-          const n = storeCounts.get(s) ?? { match: 0, possible: 0, none: 0 };
-          return (
-            <div
-              key={s}
-              className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs"
-            >
-              <StoreBadge storeType={s} />
-              <span className="text-muted-foreground">
-                match <b className="font-semibold text-foreground">{n.match}</b> ·
-                possible <b className="font-semibold text-foreground">{n.possible}</b> ·
-                none <b className="font-semibold text-foreground">{n.none}</b>
-              </span>
-            </div>
-          );
-        })}
-        <Link
-          href="/duplicates"
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
-            (stats?.pendingDuplicates ?? 0) > 0
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
-              : "border-border bg-card text-muted-foreground hover:bg-accent",
-          )}
-        >
-          <Copy className="size-3.5" />
-          Duplicates <b className="font-semibold">{stats?.pendingDuplicates ?? 0}</b>
-        </Link>
-        <span className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-muted-foreground">
-          <EyeOff className="size-3.5" />
-          Ignored <b className="font-semibold">{stats?.ignored ?? 0}</b>
-        </span>
-        <div className="ml-auto flex flex-wrap gap-1.5">
-          <Button size="sm" disabled={action !== null} onClick={() => runAction("rematch", api.rematch)}>
-            {action === "rematch" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-            Rematch
-          </Button>
-          <Button size="sm" disabled={action !== null} onClick={() => runAction("sync lidl", () => api.sync("lidl"))}>
-            {action === "sync lidl" && <Loader2 className="animate-spin" />}
-            Sync Lidl
-          </Button>
-          <Button size="sm" disabled={action !== null} onClick={() => runAction("sync rema", () => api.sync("rema"))}>
-            {action === "sync rema" && <Loader2 className="animate-spin" />}
-            Sync Rema
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
+      <PageHeader title="Queue" subtitle={`${total} item(s) in this view`}>
         <Select
           value={storeType}
           onChange={(e) => {
@@ -193,28 +227,7 @@ export default function QueuePage() {
             </option>
           ))}
         </Select>
-        <div className="flex rounded-lg border border-border bg-card p-0.5">
-          {BUCKETS.map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => {
-                setBucket(b);
-                setPage(1);
-              }}
-              className={cn(
-                "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors",
-                bucket === b
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {b}
-              <span className="ml-1.5 text-xs opacity-70">{bucketCounts[b]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="relative min-w-56 flex-1">
+        <div className="relative w-48 sm:w-64">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -224,39 +237,116 @@ export default function QueuePage() {
             aria-label="Search"
           />
         </div>
-      </div>
+      </PageHeader>
 
-      <Pagination page={page} pageCount={pageCount} total={total} disabled={loading} onPageChange={setPage} />
-
-      {listError && (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {listError}
-        </p>
-      )}
-
-      {loading && items.length === 0 ? (
-        <p className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading queue…
-        </p>
-      ) : items.length === 0 && !listError ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Queue is empty for this filter.
-        </p>
-      ) : (
-        <div className={cn("flex flex-col gap-3", loading && "opacity-60")}>
-          {items.map((item) => (
-            <QueueCard
-              key={`${item.storeType}-${item.storeProductId}`}
-              item={item}
-              mode="queue"
-              onRemove={() => removeItem(item)}
-            />
+      <div className="flex flex-wrap items-center gap-3">
+        <div
+          role="tablist"
+          aria-label="Bucket"
+          className="flex rounded-lg border border-border bg-card p-0.5 shadow-card"
+        >
+          {BUCKETS.map((b) => (
+            <button
+              key={b}
+              type="button"
+              role="tab"
+              aria-selected={bucket === b}
+              onClick={() => {
+                setBucket(b);
+                setPage(1);
+              }}
+              className={cn(
+                "cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-medium capitalize transition-colors duration-150",
+                bucket === b
+                  ? "bg-primary/12 text-primary"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {b}
+              <span className="ml-1.5 text-xs tabular-nums opacity-70">
+                {bucketCounts[b]}
+              </span>
+            </button>
           ))}
         </div>
+        <p className="hidden text-xs text-muted-foreground md:block">
+          <kbd className="rounded border border-border bg-muted px-1 font-mono">j</kbd>/
+          <kbd className="rounded border border-border bg-muted px-1 font-mono">k</kbd>{" "}
+          navigate ·{" "}
+          <kbd className="rounded border border-border bg-muted px-1 font-mono">A</kbd>{" "}
+          approve ·{" "}
+          <kbd className="rounded border border-border bg-muted px-1 font-mono">I</kbd>{" "}
+          ignore ·{" "}
+          <kbd className="rounded border border-border bg-muted px-1 font-mono">Esc</kbd>{" "}
+          deselect
+        </p>
+      </div>
+
+      {listError && (
+        <ErrorBanner
+          message={listError}
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       )}
 
-      {items.length > 0 && (
-        <Pagination page={page} pageCount={pageCount} total={total} disabled={loading} onPageChange={setPage} />
+      {loading && items.length === 0 && !listError ? (
+        <CardListSkeleton />
+      ) : items.length === 0 && !listError ? (
+        <EmptyState
+          title={
+            debounced
+              ? `No results for “${debounced}”`
+              : `Nothing in ${bucket}`
+          }
+          hint={debounced ? "Try a shorter search term." : EMPTY_HINTS[bucket]}
+          icon={<Inbox />}
+        />
+      ) : (
+        <>
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            disabled={loading}
+            onPageChange={setPage}
+          />
+          <div
+            className={cn(
+              "flex flex-col gap-3",
+              loading && "pointer-events-none opacity-60",
+            )}
+          >
+            {items.map((item, idx) => {
+              const id = keyOf(item);
+              return (
+                <div
+                  key={id}
+                  ref={(el) => {
+                    if (el) cardEls.current.set(id, el);
+                    else cardEls.current.delete(id);
+                  }}
+                  onClick={() => setSelectedIdx(idx)}
+                >
+                  <QueueCard
+                    item={item}
+                    mode="queue"
+                    selected={selectedIdx === idx}
+                    leaving={leaving.has(id)}
+                    registerActions={registerFor(id)}
+                    onRemove={() => removeItem(item)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            disabled={loading}
+            onPageChange={setPage}
+          />
+        </>
       )}
     </div>
   );
