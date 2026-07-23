@@ -144,6 +144,26 @@ export default function MatchedPage() {
     }
   };
 
+  const saveLinks = async (link: LinkItem, eans: string[]) => {
+    try {
+      const res = await api.createLink({
+        storeType: link.storeType,
+        storeProductId: link.storeProductId,
+        eans,
+      });
+      const priced = res.priced ? ` · priced at ${res.priced} stores` : "";
+      toast(
+        `Links updated (${eans.length} EAN${eans.length === 1 ? "" : "s"})${priced}`,
+        "success",
+      );
+      load(clientMode ? 1 : page);
+      void refreshStats();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Failed to update links", "error");
+      throw e;
+    }
+  };
+
   const toggleExpand = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -253,6 +273,7 @@ export default function MatchedPage() {
                   confirming={confirmId === id}
                   busy={busyId === id}
                   onUnlink={() => unlink(link)}
+                  onSave={(eans) => saveLinks(link, eans)}
                 />
               );
             })}
