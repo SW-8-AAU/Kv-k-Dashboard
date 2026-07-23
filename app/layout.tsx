@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { LightboxProvider } from "@/components/app/lightbox";
+import { StatsProvider } from "@/components/app/stats-provider";
 import { ToastProvider } from "@/components/app/toaster";
-import { Nav } from "@/components/app/nav";
+import { Sidebar } from "@/components/app/sidebar";
 
 export const metadata: Metadata = {
   title: {
@@ -21,19 +22,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="flex min-h-full flex-col">
+      <body className="flex min-h-dvh">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="dark"
           disableTransitionOnChange
         >
           <ToastProvider>
             <LightboxProvider>
-              <Nav />
-              <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-                {children}
-              </main>
+              <StatsProvider>
+                <Sidebar />
+                <main className="flex min-w-0 flex-1 flex-col px-4 pb-12 sm:px-6">
+                  <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col">
+                    {children}
+                  </div>
+                </main>
+              </StatsProvider>
             </LightboxProvider>
           </ToastProvider>
         </ThemeProvider>

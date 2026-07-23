@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ToastKind = "success" | "error" | "info";
@@ -12,11 +13,15 @@ interface Toast {
 }
 
 const kindClasses: Record<ToastKind, string> = {
-  success:
-    "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100",
-  error:
-    "border-red-500/40 bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100",
-  info: "border-border bg-popover text-popover-foreground",
+  success: "border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
+  error: "border-red-500/40 text-red-700 dark:text-red-300",
+  info: "border-border text-popover-foreground",
+};
+
+const kindIcons: Record<ToastKind, React.ReactNode> = {
+  success: <CheckCircle2 className="size-4 shrink-0" />,
+  error: <AlertCircle className="size-4 shrink-0" />,
+  info: <Info className="size-4 shrink-0" />,
 };
 
 const ToastContext = createContext<(message: string, kind?: ToastKind) => void>(
@@ -36,7 +41,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => [...prev, { id, message, kind }]);
     window.setTimeout(
       () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-      4000,
+      4500,
     );
   }, []);
 
@@ -49,11 +54,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={t.id}
             role="status"
             className={cn(
-              "fade-in pointer-events-auto rounded-lg border px-3 py-2 text-sm shadow-lg",
+              "toast-in pointer-events-auto flex items-start gap-2.5 rounded-lg border bg-popover px-3.5 py-2.5 text-sm shadow-raised",
               kindClasses[t.kind],
             )}
           >
-            {t.message}
+            {kindIcons[t.kind]}
+            <span className="min-w-0 flex-1 text-foreground">{t.message}</span>
           </div>
         ))}
       </div>

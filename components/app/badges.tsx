@@ -1,4 +1,6 @@
+import { TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { CandidateSource, MissingField, StoreType } from "@/lib/types";
 
 const storeClasses: Record<StoreType, string> = {
@@ -33,6 +35,8 @@ const linkSourceClasses: Record<string, string> = {
     "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
   manual:
     "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  "legacy-synthetic":
+    "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };
 
 export function LinkSourceBadge({ linkSource }: { linkSource: string }) {
@@ -42,10 +46,16 @@ export function LinkSourceBadge({ linkSource }: { linkSource: string }) {
   return <Badge className={cls}>{linkSource}</Badge>;
 }
 
-export function MissingBadge({ field }: { field: MissingField }) {
+/** Approval-gate pill: the backend 422s promotion while a field is missing. */
+export function GateBadge({ field }: { field: MissingField }) {
   return (
-    <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
-      missing {field}
-    </Badge>
+    <Tooltip
+      label={`Approval is blocked: this listing has no ${field}. The backend requires image + quantity + unit before a product can be created or promoted.`}
+    >
+      <Badge className="cursor-help border-amber-500/50 bg-amber-500/15 font-semibold text-amber-700 dark:text-amber-300">
+        <TriangleAlert className="size-3" />
+        missing {field}
+      </Badge>
+    </Tooltip>
   );
 }

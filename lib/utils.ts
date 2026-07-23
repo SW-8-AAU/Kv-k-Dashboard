@@ -29,3 +29,25 @@ export function formatDate(iso: string): string {
 }
 
 export const EAN_PATTERN = /^\d{8,14}$/;
+
+/** Case/whitespace-insensitive text equality for diff highlighting.
+ *  Missing values on either side count as "no difference to show". */
+export function textDiffers(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() !== b.trim().toLowerCase();
+}
+
+/** Size equality across quantity+unit pairs; null on either side = no diff. */
+export function sizeDiffers(
+  aQty: number | null | undefined,
+  aUnit: string | null | undefined,
+  bQty: number | null | undefined,
+  bUnit: string | null | undefined,
+): boolean {
+  const a = formatSize(aQty, aUnit);
+  const b = formatSize(bQty, bUnit);
+  return textDiffers(a, b);
+}

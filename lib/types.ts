@@ -109,6 +109,8 @@ export interface LinkResult {
   linked?: string[];
   created?: string[];
   ean?: string;
+  /** Number of stores where the approval immediately wrote live offers. */
+  priced?: number;
 }
 
 export interface UnlinkResult {

@@ -41,12 +41,15 @@ function apiBase(): string {
   return (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 }
 
-type QueryValue = string | number | undefined;
+type QueryValue = string | number | null | undefined;
 
+/** The single query-string builder for every API call. Empty strings, null and
+ *  undefined are OMITTED — never send `storeType=` style empty params, the
+ *  backend has 400'd on those before. Route every new endpoint through this. */
 function qs(params: Record<string, QueryValue>): string {
   const sp = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === "") continue;
+    if (value === undefined || value === null || value === "") continue;
     sp.set(key, String(value));
   }
   const s = sp.toString();
@@ -149,7 +152,7 @@ export const api = {
   queue: (params: QueueParams) =>
     request<QueueResponse>(`/queue${qs({ ...params })}`),
 
-  links: (params: { storeType?: string; page?: number }) =>
+  links: (params: { storeType?: string; page?: number; curated?: 1 }) =>
     request<LinksResponse>(`/links${qs({ ...params })}`),
 
   createLink: (payload: {
