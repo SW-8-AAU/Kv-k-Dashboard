@@ -19,7 +19,14 @@ import { useQueueKeyboard } from "@/components/app/use-queue-keyboard";
 
 const LIMIT = 50;
 const EXIT_MS = 190;
-const STORES: StoreType[] = ["lidl", "rema", "salling"];
+const STORES: StoreType[] = [
+  "lidl",
+  "rema",
+  "salling",
+  "meny",
+  "spar",
+  "min-kobmand",
+];
 const BUCKETS: Bucket[] = ["match", "possible", "none"];
 
 const EMPTY_HINTS: Record<Bucket, string> = {

@@ -39,6 +39,13 @@ const ACTIONS: Action[] = [
     icon: <Download className="size-4" />,
     run: () => api.sync("rema"),
   },
+  {
+    id: "sync-tjek",
+    label: "Sync leaflets",
+    hint: "MENY, SPAR & Min Købmand tilbudsaviser",
+    icon: <Download className="size-4" />,
+    run: () => api.sync("tjek"),
+  },
 ];
 
 /** All background jobs behind one dropdown; each row shows its own spinner. */

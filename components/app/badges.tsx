@@ -8,6 +8,11 @@ const storeClasses: Record<StoreType, string> = {
   rema: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300",
   salling:
     "border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+  meny:
+    "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  spar: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  "min-kobmand":
+    "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
 };
 
 export function StoreBadge({ storeType }: { storeType: StoreType }) {

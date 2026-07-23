@@ -1,7 +1,13 @@
 /** Typed contract of the backend's /dashboard API. The dashboard is a thin
  *  client: every shape here mirrors a backend response verbatim. */
 
-export type StoreType = "lidl" | "rema" | "salling";
+export type StoreType =
+  | "lidl"
+  | "rema"
+  | "salling"
+  | "meny"
+  | "spar"
+  | "min-kobmand";
 export type Bucket = "match" | "possible" | "none";
 export type MissingField = "image" | "quantity" | "unit";
 export type CandidateSource = "products" | "off";

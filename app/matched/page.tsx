@@ -16,7 +16,14 @@ import { CardListSkeleton } from "@/components/app/skeletons";
 import { useStats } from "@/components/app/stats-provider";
 import { useToast } from "@/components/app/toaster";
 
-const STORES: StoreType[] = ["lidl", "rema", "salling"];
+const STORES: StoreType[] = [
+  "lidl",
+  "rema",
+  "salling",
+  "meny",
+  "spar",
+  "min-kobmand",
+];
 const PAGE_SIZE = 50;
 /** Above this the server clearly didn't paginate; slice client-side instead
  *  of rendering thousands of rows (the barcode sync creates ~4k links). */
