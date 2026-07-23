@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Inbox, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { Bucket, QueueItem, StoreType } from "@/lib/types";
@@ -12,9 +12,10 @@ import { EmptyState } from "@/components/app/empty-state";
 import { ErrorBanner } from "@/components/app/error-banner";
 import { PageHeader } from "@/components/app/page-header";
 import { Pagination } from "@/components/app/pagination";
-import { QueueCard, type QueueCardActions } from "@/components/app/queue-card";
+import { QueueCard } from "@/components/app/queue-card";
 import { CardListSkeleton } from "@/components/app/skeletons";
 import { useStats } from "@/components/app/stats-provider";
+import { useQueueKeyboard } from "@/components/app/use-queue-keyboard";
 
 const LIMIT = 50;
 const EXIT_MS = 190;
@@ -46,18 +47,10 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
 
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  const selectedRef = useRef(selectedIdx);
-  selectedRef.current = selectedIdx;
-  const cardActions = useRef(new Map<string, QueueCardActions>());
-  const registerCbs = useRef(
-    new Map<string, (a: QueueCardActions | null) => void>(),
-  );
-  const cardEls = useRef(new Map<string, HTMLDivElement>());
+  const { selectedIdx, setSelectedIdx, registerFor, setCardEl } =
+    useQueueKeyboard(items);
 
   useEffect(() => {
     if (ready) void refreshStats();
@@ -102,69 +95,7 @@ export default function QueuePage() {
     return () => {
       stale = true;
     };
-  }, [ready, storeType, bucket, debounced, page, reloadKey]);
-
-  // Keep the selection valid as the list shrinks.
-  useEffect(() => {
-    setSelectedIdx((sel) =>
-      sel === null || items.length === 0
-        ? null
-        : Math.min(sel, items.length - 1),
-    );
-  }, [items.length]);
-
-  // Scroll the keyboard-selected card into view.
-  useEffect(() => {
-    if (selectedIdx === null) return;
-    const item = items[selectedIdx];
-    if (!item) return;
-    cardEls.current
-      .get(keyOf(item))
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [selectedIdx, items]);
-
-  // One-keystroke flow: j/k or arrows navigate, A approves, I ignores, Esc clears.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "SELECT" ||
-          t.tagName === "TEXTAREA" ||
-          t.isContentEditable)
-      ) {
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const count = itemsRef.current.length;
-      const k = e.key.toLowerCase();
-      if (k === "j" || e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIdx((s) =>
-          count === 0 ? null : s === null ? 0 : Math.min(s + 1, count - 1),
-        );
-      } else if (k === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIdx((s) =>
-          count === 0 ? null : s === null ? count - 1 : Math.max(s - 1, 0),
-        );
-      } else if (e.key === "Escape") {
-        setSelectedIdx(null);
-      } else if (k === "a" || k === "i") {
-        const sel = selectedRef.current;
-        if (sel === null) return;
-        const item = itemsRef.current[sel];
-        if (!item) return;
-        e.preventDefault();
-        const actions = cardActions.current.get(keyOf(item));
-        if (k === "a") actions?.approve();
-        else actions?.ignore();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [ready, storeType, bucket, debounced, page, reloadKey, setSelectedIdx]);
 
   const removeItem = useCallback(
     (it: QueueItem) => {
@@ -184,18 +115,6 @@ export default function QueuePage() {
     [refreshStats],
   );
 
-  const registerFor = (id: string) => {
-    let cb = registerCbs.current.get(id);
-    if (!cb) {
-      cb = (a: QueueCardActions | null) => {
-        if (a) cardActions.current.set(id, a);
-        else cardActions.current.delete(id);
-      };
-      registerCbs.current.set(id, cb);
-    }
-    return cb;
-  };
-
   const bucketCounts = useMemo(() => {
     const counts: Record<Bucket, number> = { match: 0, possible: 0, none: 0 };
     for (const row of stats?.queue ?? []) {
@@ -211,7 +130,10 @@ export default function QueuePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Queue" subtitle={`${total} item(s) in this view`}>
+      <PageHeader
+        title="Queue"
+        subtitle={`${total} item(s) in this view · ${stats?.ignored ?? 0} ignored`}
+      >
         <Select
           value={storeType}
           onChange={(e) => {
@@ -294,14 +216,12 @@ export default function QueuePage() {
       ) : items.length === 0 && !listError ? (
         <EmptyState
           title={
-            debounced
-              ? `No results for “${debounced}”`
-              : `Nothing in ${bucket}`
+            debounced ? `No results for “${debounced}”` : `Nothing in ${bucket}`
           }
           hint={debounced ? "Try a shorter search term." : EMPTY_HINTS[bucket]}
           icon={<Inbox />}
         />
-      ) : (
+      ) : items.length === 0 ? null : (
         <>
           <Pagination
             page={page}
@@ -319,14 +239,7 @@ export default function QueuePage() {
             {items.map((item, idx) => {
               const id = keyOf(item);
               return (
-                <div
-                  key={id}
-                  ref={(el) => {
-                    if (el) cardEls.current.set(id, el);
-                    else cardEls.current.delete(id);
-                  }}
-                  onClick={() => setSelectedIdx(idx)}
-                >
+                <div key={id} ref={setCardEl(id)} onClick={() => setSelectedIdx(idx)}>
                   <QueueCard
                     item={item}
                     mode="queue"

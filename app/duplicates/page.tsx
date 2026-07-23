@@ -112,7 +112,7 @@ export default function DuplicatesPage() {
           hint="Duplicate suggestions are materialized after each sync and rematch."
           icon={<Copy />}
         />
-      ) : (
+      ) : items.length === 0 ? null : (
         <>
           <Pagination
             page={page}

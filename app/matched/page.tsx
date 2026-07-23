@@ -226,7 +226,7 @@ export default function MatchedPage() {
           }
           icon={<Link2 />}
         />
-      ) : (
+      ) : items.length === 0 ? null : (
         <>
           <Pagination
             page={page}

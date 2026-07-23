@@ -125,7 +125,7 @@ export default function LegacyPage() {
           }
           icon={<History />}
         />
-      ) : (
+      ) : items.length === 0 ? null : (
         <>
           <Pagination
             page={page}

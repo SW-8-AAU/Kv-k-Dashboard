@@ -4,16 +4,31 @@ Thin Next.js client for the backend's `/dashboard` API. Zero business logic live
 here — every screen fetches the Nest.js backend, which owns matching, linking,
 duplicate detection, and sync jobs.
 
+The shell is a left sidebar (Queue / Matched / Duplicates / Legacy with live
+count badges from `/dashboard/stats`) plus a sticky per-page top bar carrying
+that page's filters and the global **Sync** menu (Rematch, Sync Lidl, Sync
+Rema).
+
 Pages:
 
-- **/** — the curation queue: per-store/bucket stats, match/possible/none tabs,
-  search, candidate selection (checkboxes + custom EAN), approve/ignore.
-- **/matched** — linked listings with their products; unlink.
-- **/duplicates** — side-by-side duplicate pairs; keep A/B or dismiss.
+- **/** — the curation queue: match/possible/none segmented tabs with live
+  counts, store filter, search, candidate comparison rows (differing fields
+  highlighted), approve/ignore. Keyboard flow: `j`/`k` or arrows select a card,
+  `A` approves the pre-selected candidates, `I` ignores, `Esc` deselects.
+- **/matched** — linked listings; defaults to the **Curated** view
+  (`?curated=1`, manual + auto-approved) with a toggle to include the barcode
+  (auto) links from the sync. Expandable rows, two-step unlink confirm.
+- **/duplicates** — side-by-side duplicate pairs with differing fields
+  highlighted; keep A/B or dismiss.
 - **/legacy** — Rema legacy items backed by synthetic products; approve exactly
-  one EAN (rename or merge).
+  one EAN (rename or merge, spelled out in the result toast).
 - **/login** — password login (token stored in localStorage, sent as
   `Authorization: Bearer`).
+
+All requests go through `lib/api.ts`, whose query builder omits empty/undefined
+params (never send `storeType=`). Every list fetch surfaces API errors in a
+banner with retry, and `app/error.tsx` catches anything that would otherwise
+white-screen a page.
 
 ## Environment
 
